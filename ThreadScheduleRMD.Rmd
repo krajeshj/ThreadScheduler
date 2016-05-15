@@ -1,0 +1,183 @@
+---
+title: "ThreadScheduler"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Code for ThreadScheduling Probability
+
+There are Two Processcor cores each capable of running 2 threads.
+A stress test is required to be  performed in the design on a FPGA platform. A selection of tests are picked at random from a pool of tests. 
+
+The expectation was that the tests would run without any hitch over a number of iterations or tries, the hypothesis being that the probability of occurance of  3 slave mode tests scheduled without a corresponding master is very slim.
+
+In reality, it was otherwise
+
+This R program plots the probability of the test Success abd Test Fail over given number of tries and proves that it does not take many tries to end up with a failure
+
+```{r, message = FALSE}
+#This program attempts to get the plot of sucessful runs over number of tries
+library(dplyr)
+library(RSQLite)
+library(tidyr)
+library(ggplot2)
+library(readr)
+library(stringr)
+library(scales)
+library(mixtools)
+
+
+```
+## Details
+Here is how the test is set up 
+
+* There are 4  tests  A, B, C, and D
+    + Further more, test A can run in Master or slave modes - M or S
+* There are 2 cores with two threads each
+* Each thread is named t~0~, t~1~, t~2~ and t~3~
+* 4 instances of each test is picked at random and scheduled 
+* 4 instances of each of the tests, A,B, C and D  create a pool of 16 tests to choose from 
+* For all practical purposes, the total pool of tests can be thought of as
+    + MSSS
+    + BBBB
+    + CCCC
+    + DDDD
+ 
+* There are 4 threads to schedule from this pool of tests
+
+* Only if M is scheduled in t~0~, S can run sucessfully
+    + e.g MSSS runs successfully -> q3
+
+        - MSSX runs successfully
+        - MSXS runs successfully ->q2
+        - MXSS runs successfully
+
+        - MSXX runs successfully
+        - MXSX runs successfully ->q1
+        - MXXS runs successfully
+
+        - MXXX runs successfully ->q0
+
+        - XXXX runs successfully ->qx
+# Probability 
+* Example
+    + A in slave  mode (S) can be picked  picked with a probability of 4/16 into t~1~
+    + A in slave  mode (S) can be picked  picked with a probability of 3/15 into t~2~
+    + A in slave  mode (S) can be picked  picked with a probability of 2/14 into t~3~
+    + A in Master mode (M) can be picked  picked with a probability of 1/13 into t~0~
+    + Let q~3~ be the probability of a successful thread scheduling 
+
+#### Let us set up the Probability of the other cases enumerated above
+```{r}
+q3 <- (1/13) * (4/16) * (3/15) * (2/14)
+
+q2 <- 3 * (2/13) * (4/16) * (3 /15)* (12/14)
+
+q1 <- 3 * (3/13) * 3 * (4/16) * (12/15) * (11/14)
+
+q0 <- (4/13) * (12/16) * (11/15) * (10/14)
+
+qx <- (12/16) * (11/15) * (10/14) * (9/13)
+
+```
+#### total probability of a sucessful run in 1 try 
+```{r}
+q <- q3 + q2 + q1 + q0 + qx
+q
+```
+
+#### probability of failure in 1st try
+
+```{r}
+ 1-q
+```
+ 
+#### Probability of failure in  2 trys
+```{r}
+q * ( 1-q)
+```
+
+#### Probability of failure in 3 trys
+
+```{r}
+q*q *( 1-q)
+```
+#### probability of failure in 4096th try 
+```{r}
+q^4095 * ( 1-q)
+```
+#### Probability of success in 4096 tries
+```{r}
+P <- q^4096
+P
+```
+#### Probability of failure in 4096 tries
+```{r}
+F <- 1-P
+F
+```
+
+
+#### Define a function 
+```{r}
+# gives success probability in xth tries
+sched_success <- function (x, q) { q^(x)}
+
+# gives success probability in xth tries
+sched_fail    <- function (x, q) { 1 -  (q^(x))}
+
+# create a vector of 
+tries <- c(seq(1,20, by = 1))
+```
+#### print y pass
+
+```{r}
+y_pass <- sapply(tries, sched_success,q)
+y_pass
+```
+#### print y fail 
+
+```{r}
+
+y_fail <- sapply(tries, sched_fail,q)
+y_fail
+
+```
+
+# Plot
+```{r, echo = FALSE}
+# Data Layer
+n <-(ggplot)
+
+# Data + Aesthetics Mapping 
+n <-ggplot(data_frame(tries),aes(x= tries, y = sapply(tries, sched_success,q)))
+
+# Data + aes + Geometries 
+n <- n + geom_jitter(aes( color = "success")) 
+
+n <- n + geom_jitter(aes( x = tries, y = sapply(tries, sched_fail,q),color = "fail"))
+
+# Data + Aesthetic Mapping +  Geom + Facets
+#n <- n + facet_grid(. ~ Department.Title ) 
+
+#Data + Aesthetics + Geoms + Facets + Statistics
+# ... add a linear regression model here
+
+#Data + Aesthetics + Geoms + Facets + Statistics + Co-ordinates
+#n <- n + scale_y_discrete(limits=c("00000","120000"), breaks=seq(00000,120000,10000))
+n <- n + xlab("Number of tries")
+n <- n + ylab("Probability of Success or Failure ")
+
+#Data + Aesthetics + Geoms + Facets + Statistics + Co-ordinates + Theme 
+#n <- n + theme(axis.text.x = element_text(angle=305))
+
+print(n)
+
+
+```
+
+ 
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
